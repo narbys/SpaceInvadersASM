@@ -1,0 +1,8 @@
+main.gb
+main.map
+main.o
+main.sym
+Sprites/SpaceInvadersBkgTiles.gbr
+Sprites/SpaceInvaderTileSprites.gbr
+Sprites/SpaceInvaderTileSprites_ASM_1.gbr
+.vscode/settings.json
