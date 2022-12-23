@@ -122,10 +122,10 @@ UpdatePlayerBullet:
 
     ; Increase the bullet Y
     ld a, [_SPR2_Y]
-    dec a; Y goes down
+    sub a, 3; Y goes down, move by 3 pixels
     ; Check if we hit the edge
-    cp a, 0
-    jp z, DeactivatePlayerBullet
+    cp a, 8
+    jp c, DeactivatePlayerBullet; if a < 8
     ld [_SPR2_Y], a
     jp EndUpdate
 DeactivatePlayerBullet:
