@@ -1,6 +1,7 @@
 ; Credit to ISSOtm for his tutorial
 
 INCLUDE "hardware.inc"
+INCLUDE "graphics.asm"
 
 ; Player sprite left part
 _SPR0_Y		EQU		_OAMRAM	; sprite Y 0 is the beginning of the sprite mem
@@ -33,6 +34,29 @@ WaitVBlank:
     ; Turn LCD off
     ld a, 0
     ld [rLCDC], a
+
+    ; First, put an empty tile at the start of our background tiles
+    ld de, EmptyTile
+    ld hl, $9000
+    ld bc, EmptyTileEnd -EmptyTile
+    call Memcopy
+    ; Copy tile data for the invaders (background layer)
+    ld de, InvaderTiles
+    ; hl should be at the correct address from previous memcopy
+    ld bc, InvaderTilesEnd - InvaderTiles
+    call Memcopy
+
+    ; Clear the background ($9800-$9BFF)
+    ld hl, _SCRN0; Load $9800 into hl
+    ld bc, 32*32; Number of tiles in the background map
+ClearBkg:
+    ld a, 0; Load 0 into a
+    ld [hli], a
+    dec bc
+    ld a, b; load b into a
+    or a, c; or b and c, through a
+    jp nz, ClearBkg
+
 
     ;  Copy the tiledata for player
     ld de, PlayerTiles; Where the data will be copied from
@@ -108,7 +132,7 @@ WaitVBlank2:
     cp 144
     jp c, WaitVBlank2
 
-    ; Check the current keys every frame and move left or right
+    ; Check the current keys every frame
     call Input
 
     ; Update
@@ -133,6 +157,7 @@ DeactivatePlayerBullet:
     ld [wBulletAlive], a; Set bullet to no longer alive
     ld [_SPR2_Y], a; Set bullet Y to 0
     ld [_SPR2_X], a; Set bullet X to 0
+    ; End of update
 EndUpdate:
 
     ; Check if A is pressed
@@ -203,7 +228,7 @@ Memcopy:
     inc de; increment the address of the data we need to copy, so go to the next one
     dec bc; decrement the amount of bytes we have to copy, as we just did one
     ld a, b; load b into a
-    or a, c; or b and c together
+    or a, c; or b and c together, through a
     jp nz, Memcopy; if previous or is not zero, we are not done copying. redo the loop
     ret
 
@@ -244,21 +269,21 @@ Input:
 .knownret
     ret
 
-;;;;;;;;;;;;
-; Graphics ;
-;;;;;;;;;;;;
+; ;;;;;;;;;;;;
+; ; Graphics ;
+; ;;;;;;;;;;;;
 
-PlayerTiles:
-    DB $00,$00,$01,$01,$01,$01,$0F,$0F
-    DB $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F
-    DB $80,$80,$C0,$C0,$C0,$C0,$F8,$F8
-    DB $FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC
-PlayerTilesEnd:
+; PlayerTiles:
+;     DB $00,$00,$01,$01,$01,$01,$0F,$0F
+;     DB $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F
+;     DB $80,$80,$C0,$C0,$C0,$C0,$F8,$F8
+;     DB $FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC
+; PlayerTilesEnd:
 
-BulletTiles:
-    DB $80,$80,$80,$80,$80,$80,$80,$80
-    DB $80,$80,$80,$80,$80,$80,$00,$00
-BulletTilesEnd:
+; BulletTiles:
+;     DB $80,$80,$80,$80,$80,$80,$80,$80
+;     DB $80,$80,$80,$80,$80,$80,$00,$00
+; BulletTilesEnd:
 
 ;;;;;;;;;;;
 ; Globals ;
