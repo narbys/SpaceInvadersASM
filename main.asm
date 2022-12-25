@@ -38,7 +38,7 @@ WaitVBlank:
     ; First, put an empty tile at the start of our background tiles
     ld de, EmptyTile
     ld hl, $9000
-    ld bc, EmptyTileEnd -EmptyTile
+    ld bc, 16; Size of a tile
     call Memcopy
     ; Copy tile data for the invaders (background layer)
     ld de, InvaderTiles
@@ -57,6 +57,27 @@ ClearBkg:
     or a, c; or b and c, through a
     jp nz, ClearBkg
 
+    ; Draw a single invader on the background, as a test
+    ; ld hl, _SCRN0; Load $9800 into hl again
+    ; ld [hl], $01; Tile 1 (the invader tile)
+
+    ld hl, _SCRN0+32*2+2; Load $9800 into hl, + 32*Y+X for startpos in tiles
+    ld b, 40; 40 invaders to draw
+    ld c, 8; Amount of invaders per row 
+DrawInvaders:
+    ld a, $01
+    ld [hli], a; Draw invader (tile ID 1) onto screen
+    ;inc hl; Go to the next tile
+    ld a, $00; add whitespace
+    ld [hli], a
+    dec c;
+    jp nz, NextInvaderRowSkip; If we still haven''t got 8 in our row, don't go to next row
+    ld de, 16
+    add hl, de; Go to next row
+    ld c, 8; Reset C
+NextInvaderRowSkip:    
+    dec b; Decrement the amount we need to draw
+    jp nz, DrawInvaders; If this amount isn't 0, continue loop
 
     ;  Copy the tiledata for player
     ld de, PlayerTiles; Where the data will be copied from

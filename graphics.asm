@@ -20,6 +20,6 @@ EmptyTile:
 EmptyTileEnd:
 
 InvaderTiles:
-    DB $80,$80,$80,$80,$80,$80,$80,$80
-    DB $80,$80,$80,$80,$80,$80,$80,$80
+    DB $18,$18,$3C,$3C,$7E,$7E,$DB,$DB
+    DB $FF,$FF,$5A,$5A,$81,$81,$42,$42
 InvaderTilesEnd:
