@@ -1,7 +1,7 @@
 ; Credit to ISSOtm for his tutorial
 
 INCLUDE "hardware.inc"
-INCLUDE "graphics.asm"
+INCLUDE "graphics.inc"
 
 ; Player sprite left part
 _SPR0_Y		EQU		_OAMRAM	; sprite Y 0 is the beginning of the sprite mem
@@ -18,6 +18,10 @@ _SPR2_Y     EQU     _OAMRAM+8
 _SPR2_X     EQU    	_OAMRAM+9
 _SPR2_NUM   EQU    	_OAMRAM+10
 _SPR2_ATT   EQU    	_OAMRAM+11
+
+; Invader start positions
+_INV_START_X EQU 2
+_INV_START_Y EQU 2
 
 SECTION "Header", ROM0[$100]
     jp EntryPoint
@@ -57,27 +61,39 @@ ClearBkg:
     or a, c; or b and c, through a
     jp nz, ClearBkg
 
+
+    ; Init global variables
+    ld a, 0
+    ld [wFrameCounter], a
+    ld [wInvaderSlide], a; Slide = 0
+    ld [wInvaderDir], a; 0=right, 1=left
+    ld a, _INV_START_X
+    ld [wFirstInvaderX], a
+    ld a, _INV_START_Y
+    ld [wFirstInvaderY], a
+
     ; Draw a single invader on the background, as a test
     ; ld hl, _SCRN0; Load $9800 into hl again
     ; ld [hl], $01; Tile 1 (the invader tile)
 
-    ld hl, _SCRN0+32*2+2; Load $9800 into hl, + 32*Y+X for startpos in tiles
+    ld hl, _SCRN0+SCRN_VX_B*_INV_START_Y+_INV_START_X; Load $9800 into hl, + 32*Y+X for startpos in tiles
     ld b, 40; 40 invaders to draw
-    ld c, 8; Amount of invaders per row 
-DrawInvaders:
+    ld c, 8; Amount of invaders per row
+DrawInvadersInit:
     ld a, $01
     ld [hli], a; Draw invader (tile ID 1) onto screen
-    ;inc hl; Go to the next tile
     ld a, $00; add whitespace
     ld [hli], a
-    dec c;
-    jp nz, NextInvaderRowSkip; If we still haven''t got 8 in our row, don't go to next row
-    ld de, 16
-    add hl, de; Go to next row
+    dec c
+    jp nz, NextInvaderRowSkipInit; If we still haven't got 8 in our row, don't go to next row
+    ld a, b; Store b for now
+    ld bc, 16; load the amount of tiles we need to add to go to next row into bc
+    add hl, bc; Go to next row
     ld c, 8; Reset C
-NextInvaderRowSkip:    
+    ld b, a; Put the original value of b back into b
+NextInvaderRowSkipInit:    
     dec b; Decrement the amount we need to draw
-    jp nz, DrawInvaders; If this amount isn't 0, continue loop
+    jp nz, DrawInvadersInit; If this amount isn't 0, continue loop
 
     ;  Copy the tiledata for player
     ld de, PlayerTiles; Where the data will be copied from
@@ -138,10 +154,6 @@ ClearOam:
     ld a, $E4
     ld [rOBP0], a
 
-    ; Init global variable
-    ld a, 0
-    ld [wFrameCounter], a
-
 ; Main gameloop
 Main:
     ; Wait until it is not VBlank
@@ -159,11 +171,58 @@ WaitVBlank2:
     ; Update
 Update:
     ; Update the player bullet
+UpdateInvaders:
+    ; Move on a timer
+    ld a, [wFrameCounter]
+    inc a; Increment wframecounter
+    ld [wFrameCounter], a
+    cp a, 15; Every 15 frames run following code
+    jp nz, EndUpdateInvaders
+
+    ld a, 0; Reset wFrameCounter back to 0
+    ld [wFrameCounter], a
+
+    ; Move invaders
+    ; First, get the position of out first invader into hl
+
+    ; first set HL to SCRN_VX_B*[Y]
+    ld h, 0
+    ld a, [wFirstInvaderY]
+    ld l, a
+    ; ld b, 0
+    ; ld c, a
+    ; rept SCRN_VX_B-1 ; this should repeat 32 times
+    ; add hl, bc
+    ; endr
+    ld a, [wFirstInvaderY]
+    ld h, 0
+    ld l, a
+    rept 5; a*32
+    add hl, hl
+    endr
+    ; set BC to [X], then add to HL
+    ld b, 0
+    ld a, [wFirstInvaderX]
+    ld c, a
+    add hl, bc
+    ; set BC to _SCRN0, then add to HL
+    ld bc, _SCRN0
+    add hl, bc
+
+    ld d, $01; Our tile ID
+    ld e, $00; Next tile ID
+
+    ld b, 40; 40 invaders
+    ld c, 8; 8 invaders per row
+MoveInvaders:
+    call DrawInvaderTiles
+    
+EndUpdateInvaders:
 UpdatePlayerBullet:
     ; If wBulletAlive 
     ld a, [wBulletAlive] 
     and a, 1
-    jp z, EndUpdate
+    jp z, EndUpdatePlayerBullet
 
     ; Increase the bullet Y
     ld a, [_SPR2_Y]
@@ -172,12 +231,13 @@ UpdatePlayerBullet:
     cp a, 8
     jp c, DeactivatePlayerBullet; if a < 8
     ld [_SPR2_Y], a
-    jp EndUpdate
+    jp EndUpdatePlayerBullet
 DeactivatePlayerBullet:
     ld a, 0
     ld [wBulletAlive], a; Set bullet to no longer alive
     ld [_SPR2_Y], a; Set bullet Y to 0
     ld [_SPR2_X], a; Set bullet X to 0
+EndUpdatePlayerBullet:
     ; End of update
 EndUpdate:
 
@@ -290,31 +350,45 @@ Input:
 .knownret
     ret
 
-; ;;;;;;;;;;;;
-; ; Graphics ;
-; ;;;;;;;;;;;;
-
-; PlayerTiles:
-;     DB $00,$00,$01,$01,$01,$01,$0F,$0F
-;     DB $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F
-;     DB $80,$80,$C0,$C0,$C0,$C0,$F8,$F8
-;     DB $FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC
-; PlayerTilesEnd:
-
-; BulletTiles:
-;     DB $80,$80,$80,$80,$80,$80,$80,$80
-;     DB $80,$80,$80,$80,$80,$80,$00,$00
-; BulletTilesEnd:
+; hl: Position of first invader
+; b: Amount(40) of invaders
+; c: Amount(8) of invaders per row
+; d: Tile you come from, the one your current X is one
+; e: Tile going into the next position, the one being slided
+DrawInvaderTiles:
+    ld a, d
+    ld [hli], a; Draw invader (tile ID 1) onto screen
+    ld a, e; add whitespace
+    ld [hli], a
+    dec c
+    jp nz, .NextInvaderRowSkip; If we still haven't got 8 in our row, don't go to next row
+    ld a, b; Store b for now
+    ld bc, 16; load the amount of tiles we need to add to go to next row into bc
+    add hl, bc; Go to next row
+    ld c, 8; Reset C
+    ld b, a; Put the original value of b back into b
+.NextInvaderRowSkip 
+    dec b; Decrement the amount we need to draw
+    jp nz, DrawInvaderTiles; If this amount isn't 0, continue loop
+    ret
 
 ;;;;;;;;;;;
 ; Globals ;
 ;;;;;;;;;;;
 
 SECTION "Counter", wram0
-wFrameCounter : db
+wFrameCounter : DB
+
 SECTION "Keys", wram0
-wCurKeys : db
-wNewKeys : db
+wCurKeys : DB
+wNewKeys : DB
 
 SECTION "PlayerBullet", wram0
-wBulletAlive : db
+wBulletAlive : DB
+
+SECTION "Invaders", wram0
+wInvaderSlide : db
+wInvaderDir: db
+wFirstInvaderX: db
+wFirstInvaderY: db
+
