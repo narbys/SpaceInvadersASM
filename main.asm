@@ -66,7 +66,7 @@ ClearBkg:
     ld a, 0
     ld [wFrameCounter], a
     ld [wInvaderSlide], a; Slide = 0
-    ld a, 1; TEST
+    ;ld a, 1; Move left as test
     ld [wInvaderDir], a; 0=right, 1=left
     ld a, _INV_START_X
     ld [wFirstInvaderX], a
@@ -179,7 +179,7 @@ UpdateInvaders:
     ld a, [wFrameCounter]
     inc a; Increment wframecounter
     ld [wFrameCounter], a
-    cp a, 60; Every 15 frames run following code
+    cp a, 30; Every N frames run following code
     jp nz, EndUpdateInvaders
 
     ld a, 0; Reset wFrameCounter back to 0
@@ -247,7 +247,7 @@ InvaderDirLeft:
     ld a, $09
     add a, e ; + invaderSlide
     ld e, a 
-    jp MoveInvaders
+    jp MoveInvadersLeft
 
 SlideZero:
     ld d, $01; Our tile ID
@@ -260,10 +260,47 @@ MoveInvaders:
     call DrawInvaderTiles
     jp IncreaseSlide
 
+MoveInvadersLeft:
+    dec hl; Start from the tile left of our position
+    ; swap D and E
+    ld a, d;
+    ld b, a; store d into b
+    ld a, e;
+    ld d, a; load e into d
+    ld a, b;
+    ld e, a; load the previous d into e
+
+    ld b, 40
+    ld c, 8
+    call DrawInvaderTiles
+    jp IncreaseSlide
+
 SlideZeroMove:
     ld b, 40
     ld c, 8
     call DrawInvadersInit
+
+    ; Check if we hit the left edge
+    ld a, %0001_1111
+    call SetHLToFirstInvaderXY
+    and a, l; get the lower 5 bits of L to know our X position
+    cp a, 0; Look if this X is 0
+    jp z, ChangeDirToRight
+    ld a, l; Get our L again
+    add $0E; add 15 to it, to get the position of the last invader in the row
+    ld d, a; Store this value in D
+    ld a, %0001_1111
+    and a, d; Get the lower 5 bits of D for the X position 
+    cp a, 19; Check if this X is 19, the last tile on our screen
+    jp z, ChangeDirToLeft
+    jp IncreaseSlide
+ChangeDirToLeft:
+    ld a, 1
+    ld [wInvaderDir], a
+    jp IncreaseSlide
+ChangeDirToRight:
+    ld a, 0
+    ld [wInvaderDir], a
 
 IncreaseSlide:
     ; After moving, Increase our Slide
@@ -452,8 +489,7 @@ DrawInvadersInit:
 ; e: Tile going into the next position, the one being slided
 DrawInvaderTiles:
     ld a, d
-    ld [hl], a; Draw invader's current tile onto screen
-    inc hl; next tile
+    ld [hli], a; Draw invader's current tile onto screen
     ld a, e; add the slide tile
     ld [hli], a
     dec c
@@ -467,6 +503,24 @@ DrawInvaderTiles:
     dec b; Decrement the amount we need to draw
     jp nz, DrawInvaderTiles; If this amount isn't 0, continue loop
     ret
+
+; DrawInvaderTilesLeft:
+;     ld a, e
+;     ld [hli], a ; draw slidetile first
+;     ld a, d ; draw the main tile
+;     ld [hli], a
+;     dec c
+;     jp nz, .NextInvaderRowSkip; If we still haven't got 8 in our row, don't go to next row
+;     ld a, b; Store b for now
+;     ld bc, 16; load the amount of tiles we need to add to go to next row into bc
+;     add hl, bc; Go to next row
+;     ld c, 8; Reset C
+;     ld b, a; Put the original value of b back into b
+; .NextInvaderRowSkip 
+;     dec b; Decrement the amount we need to draw
+;     jp nz, DrawInvaderTilesLeft; If this amount isn't 0, continue loop
+;     ret
+
 
 SetHLToFirstInvaderXY:
     ; first set HL to SCRN_VX_B*[Y]
