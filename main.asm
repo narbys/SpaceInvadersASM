@@ -66,6 +66,7 @@ ClearBkg:
     ld a, 0
     ld [wFrameCounter], a
     ld [wInvaderSlide], a; Slide = 0
+    ld a, 1; TEST
     ld [wInvaderDir], a; 0=right, 1=left
     ld a, _INV_START_X
     ld [wFirstInvaderX], a
@@ -79,21 +80,23 @@ ClearBkg:
     ld hl, _SCRN0+SCRN_VX_B*_INV_START_Y+_INV_START_X; Load $9800 into hl, + 32*Y+X for startpos in tiles
     ld b, 40; 40 invaders to draw
     ld c, 8; Amount of invaders per row
-DrawInvadersInit:
-    ld a, $01
-    ld [hli], a; Draw invader (tile ID 1) onto screen
-    ld a, $00; add whitespace
-    ld [hli], a
-    dec c
-    jp nz, NextInvaderRowSkipInit; If we still haven't got 8 in our row, don't go to next row
-    ld a, b; Store b for now
-    ld bc, 16; load the amount of tiles we need to add to go to next row into bc
-    add hl, bc; Go to next row
-    ld c, 8; Reset C
-    ld b, a; Put the original value of b back into b
-NextInvaderRowSkipInit:    
-    dec b; Decrement the amount we need to draw
-    jp nz, DrawInvadersInit; If this amount isn't 0, continue loop
+    call DrawInvadersInit
+
+; DrawInvadersInit:
+;     ld a, $01
+;     ld [hli], a; Draw invader (tile ID 1) onto screen
+;     ld a, $00; add whitespace
+;     ld [hli], a
+;     dec c
+;     jp nz, NextInvaderRowSkipInit; If we still haven't got 8 in our row, don't go to next row
+;     ld a, b; Store b for now
+;     ld bc, 16; load the amount of tiles we need to add to go to next row into bc
+;     add hl, bc; Go to next row
+;     ld c, 8; Reset C
+;     ld b, a; Put the original value of b back into b
+; NextInvaderRowSkipInit:    
+;     dec b; Decrement the amount we need to draw
+;     jp nz, DrawInvadersInit; If this amount isn't 0, continue loop
 
     ;  Copy the tiledata for player
     ld de, PlayerTiles; Where the data will be copied from
@@ -176,7 +179,7 @@ UpdateInvaders:
     ld a, [wFrameCounter]
     inc a; Increment wframecounter
     ld [wFrameCounter], a
-    cp a, 15; Every 15 frames run following code
+    cp a, 60; Every 15 frames run following code
     jp nz, EndUpdateInvaders
 
     ld a, 0; Reset wFrameCounter back to 0
@@ -184,39 +187,111 @@ UpdateInvaders:
 
     ; Move invaders
     ; First, get the position of out first invader into hl
-
-    ; first set HL to SCRN_VX_B*[Y]
-    ld h, 0
-    ld a, [wFirstInvaderY]
-    ld l, a
-    ; ld b, 0
-    ; ld c, a
-    ; rept SCRN_VX_B-1 ; this should repeat 32 times
-    ; add hl, bc
+    ; ; first set HL to SCRN_VX_B*[Y]
+    ; ld h, 0
+    ; ld a, [wFirstInvaderY]
+    ; ld l, a
+    ; ld a, [wFirstInvaderY]
+    ; ld h, 0
+    ; ld l, a
+    ; rept 5; a*32
+    ; add hl, hl
     ; endr
-    ld a, [wFirstInvaderY]
-    ld h, 0
-    ld l, a
-    rept 5; a*32
-    add hl, hl
-    endr
-    ; set BC to [X], then add to HL
-    ld b, 0
-    ld a, [wFirstInvaderX]
-    ld c, a
-    add hl, bc
-    ; set BC to _SCRN0, then add to HL
-    ld bc, _SCRN0
-    add hl, bc
+    ; ; set BC to [X], then add to HL
+    ; ld b, 0
+    ; ld a, [wFirstInvaderX]
+    ; ld c, a
+    ; add hl, bc
+    ; ; set BC to _SCRN0, then add to HL
+    ; ld bc, _SCRN0
+    ; add hl, bc
+    call SetHLToFirstInvaderXY
 
+    ; ld d, $01; Our tile ID
+    ; ld e, $00; Next tile ID
+
+    ld a, [wInvaderSlide]
+    cp a, 0 ; If slide == 0
+    jp z, SlideZero;
+    ; Otherwise, Check in which direction we are going
+    ld a, [wInvaderDir]
+    cp a, 0 ; Check if we are going right
+    jp z, InvaderDirRight
+    cp a, 1 ; Check if we are going left instead
+    jp z, InvaderDirLeft
+InvaderDirRight:
+    ; Tile 1
+    ld a, [wInvaderSlide]
+    ld d, a 
+    ld a, $11; Tile ID + 16
+    sub a, d ; - invaderSlide
+    ld d, a
+    ; Tile 2
+    ld a, [wInvaderSlide] 
+    ld e, a
+    ld a, $09
+    sub a, e ; - invaderSlide
+    ld e, a 
+    jp MoveInvaders
+
+InvaderDirLeft:
+    ; Tile 1
+    ld a, [wInvaderSlide]
+    ld d, a 
+    ld a, $01;
+    add a, d ; + invaderSlide
+    ld d, a
+    ; Tile 2
+    ld a, [wInvaderSlide] 
+    ld e, a
+    ld a, $09
+    add a, e ; + invaderSlide
+    ld e, a 
+    jp MoveInvaders
+
+SlideZero:
     ld d, $01; Our tile ID
     ld e, $00; Next tile ID
+    jp SlideZeroMove
 
+MoveInvaders:
     ld b, 40; 40 invaders
     ld c, 8; 8 invaders per row
-MoveInvaders:
     call DrawInvaderTiles
-    
+    jp IncreaseSlide
+
+SlideZeroMove:
+    ld b, 40
+    ld c, 8
+    call DrawInvadersInit
+
+IncreaseSlide:
+    ; After moving, Increase our Slide
+    ld a, [wInvaderSlide]
+    inc a
+    ld [wInvaderSlide], a
+    ; If we shifted 8 times, reset
+    cp a, 8
+    jp nz, EndUpdateInvaders ; Skip reset slide and moving the X pos, skip to end of update
+    ; Reset Slide
+    ld a, 0
+    ld [wInvaderSlide], a
+    ; Increase/Decrease the X pos of our initial invader
+    ; Check if we are going right, otherwise decrease
+    ld a, [wInvaderDir]
+    cp a, 0 ; If direction == 0
+    jp nz, DecreaseFirstInvaderX
+
+    ld a, [wFirstInvaderX]
+    inc a ; X++
+    ld [wFirstInvaderX], a ; Put the value back in the variable
+    jp EndUpdateInvaders
+
+DecreaseFirstInvaderX:
+    ld a, [wFirstInvaderX]
+    dec a ; X--
+    ld [wFirstInvaderX], a ; Put the value back in the variable
+
 EndUpdateInvaders:
 UpdatePlayerBullet:
     ; If wBulletAlive 
@@ -350,15 +425,36 @@ Input:
 .knownret
     ret
 
+
+DrawInvadersInit:
+    ld a, $01
+    ld [hld], a; Draw invader (tile ID 1) onto screen
+    ld a, $00; add whitespace to previous tile
+    ld [hli], a
+    inc hl
+    ld [hli], a; add whitespace to next tile
+    dec c
+    jp nz, .NextInvaderRowSkipInit; If we still haven't got 8 in our row, don't go to next row
+    ld a, b; Store b for now
+    ld bc, 16; load the amount of tiles we need to add to go to next row into bc
+    add hl, bc; Go to next row
+    ld c, 8; Reset C
+    ld b, a; Put the original value of b back into b
+.NextInvaderRowSkipInit    
+    dec b; Decrement the amount we need to draw
+    jp nz, DrawInvadersInit; If this amount isn't 0, continue loop
+    ret
+
 ; hl: Position of first invader
 ; b: Amount(40) of invaders
 ; c: Amount(8) of invaders per row
-; d: Tile you come from, the one your current X is one
+; d: Tile you come from, the one your current X is on
 ; e: Tile going into the next position, the one being slided
 DrawInvaderTiles:
     ld a, d
-    ld [hli], a; Draw invader (tile ID 1) onto screen
-    ld a, e; add whitespace
+    ld [hl], a; Draw invader's current tile onto screen
+    inc hl; next tile
+    ld a, e; add the slide tile
     ld [hli], a
     dec c
     jp nz, .NextInvaderRowSkip; If we still haven't got 8 in our row, don't go to next row
@@ -371,6 +467,28 @@ DrawInvaderTiles:
     dec b; Decrement the amount we need to draw
     jp nz, DrawInvaderTiles; If this amount isn't 0, continue loop
     ret
+
+SetHLToFirstInvaderXY:
+    ; first set HL to SCRN_VX_B*[Y]
+    ld h, 0
+    ld a, [wFirstInvaderY]
+    ld l, a
+    ld a, [wFirstInvaderY]
+    ld h, 0
+    ld l, a
+    rept 5; a*32
+    add hl, hl
+    endr
+    ; set BC to [X], then add to HL
+    ld b, 0
+    ld a, [wFirstInvaderX]
+    ld c, a
+    add hl, bc
+    ; set BC to _SCRN0, then add to HL
+    ld bc, _SCRN0
+    add hl, bc
+    ret
+
 
 ;;;;;;;;;;;
 ; Globals ;
@@ -388,7 +506,7 @@ wBulletAlive : DB
 
 SECTION "Invaders", wram0
 wInvaderSlide : db
-wInvaderDir: db
+wInvaderDir: db ; 0= right, 1= left
 wFirstInvaderX: db
 wFirstInvaderY: db
 
