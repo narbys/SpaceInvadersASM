@@ -66,7 +66,7 @@ ClearBkg:
     ld a, 0
     ld [wFrameCounter], a
     ld [wInvaderSlide], a; Slide = 0
-    ;ld a, 1; Move left as test
+    ld [wInvadersMovedDown], a
     ld [wInvaderDir], a; 0=right, 1=left
     ld a, _INV_START_X
     ld [wFirstInvaderX], a
@@ -185,31 +185,11 @@ UpdateInvaders:
     ld a, 0; Reset wFrameCounter back to 0
     ld [wFrameCounter], a
 
-    ; Move invaders
-    ; First, get the position of out first invader into hl
-    ; ; first set HL to SCRN_VX_B*[Y]
-    ; ld h, 0
-    ; ld a, [wFirstInvaderY]
-    ; ld l, a
-    ; ld a, [wFirstInvaderY]
-    ; ld h, 0
-    ; ld l, a
-    ; rept 5; a*32
-    ; add hl, hl
-    ; endr
-    ; ; set BC to [X], then add to HL
-    ; ld b, 0
-    ; ld a, [wFirstInvaderX]
-    ; ld c, a
-    ; add hl, bc
-    ; ; set BC to _SCRN0, then add to HL
-    ; ld bc, _SCRN0
-    ; add hl, bc
-    call SetHLToFirstInvaderXY
-
     ; ld d, $01; Our tile ID
     ; ld e, $00; Next tile ID
 
+CheckInvaderDir:
+    call SetHLToFirstInvaderXY
     ld a, [wInvaderSlide]
     cp a, 0 ; If slide == 0
     jp z, SlideZero;
@@ -253,13 +233,11 @@ SlideZero:
     ld d, $01; Our tile ID
     ld e, $00; Next tile ID
     jp SlideZeroMove
-
 MoveInvaders:
     ld b, 40; 40 invaders
     ld c, 8; 8 invaders per row
     call DrawInvaderTiles
-    jp IncreaseSlide
-
+    jp ClearTopInvaderRow
 MoveInvadersLeft:
     dec hl; Start from the tile left of our position
     ; swap D and E
@@ -273,7 +251,7 @@ MoveInvadersLeft:
     ld b, 40
     ld c, 8
     call DrawInvaderTiles
-    jp IncreaseSlide
+    jp ClearTopInvaderRow
 
 SlideZeroMove:
     ld b, 40
@@ -293,14 +271,44 @@ SlideZeroMove:
     and a, d; Get the lower 5 bits of D for the X position 
     cp a, 19; Check if this X is 19, the last tile on our screen
     jp z, ChangeDirToLeft
-    jp IncreaseSlide
+    jp ClearTopInvaderRow
+
 ChangeDirToLeft:
     ld a, 1
     ld [wInvaderDir], a
-    jp IncreaseSlide
+    jp MoveRowDown
 ChangeDirToRight:
     ld a, 0
     ld [wInvaderDir], a
+MoveRowDown:
+    ld a, [wFirstInvaderY]
+    inc a
+    ld [wFirstInvaderY], a; Increase our Y position
+    ld a, 1
+    ld [wInvadersMovedDown], a; Set InvaderMovedDown to 1
+    jp IncreaseSlide
+
+ClearTopInvaderRow:
+    ; Check if we should clear
+    ld a, [wInvadersMovedDown]
+    cp 1; if invadersmoveddown==1
+    jp nz, IncreaseSlide
+    ; Reset our InvadersMovedDown
+    ld a, 0
+    ld [wInvadersMovedDown], a
+    ; Clear the row above us
+    call SetHLToFirstInvaderXY
+    ld a, l
+    sub a, 32; Get tile above us
+    and a, %1110_0000; Set last 5 bits (X position) to 0
+    ld l, a
+    ; hl should now contain the correct position
+    ld b, 20; Tiles to clear
+    ld a, $00
+ClearTiles:
+    ld [hli], a
+    dec b
+    jp nz, ClearTiles
 
 IncreaseSlide:
     ; After moving, Increase our Slide
@@ -504,24 +512,6 @@ DrawInvaderTiles:
     jp nz, DrawInvaderTiles; If this amount isn't 0, continue loop
     ret
 
-; DrawInvaderTilesLeft:
-;     ld a, e
-;     ld [hli], a ; draw slidetile first
-;     ld a, d ; draw the main tile
-;     ld [hli], a
-;     dec c
-;     jp nz, .NextInvaderRowSkip; If we still haven't got 8 in our row, don't go to next row
-;     ld a, b; Store b for now
-;     ld bc, 16; load the amount of tiles we need to add to go to next row into bc
-;     add hl, bc; Go to next row
-;     ld c, 8; Reset C
-;     ld b, a; Put the original value of b back into b
-; .NextInvaderRowSkip 
-;     dec b; Decrement the amount we need to draw
-;     jp nz, DrawInvaderTilesLeft; If this amount isn't 0, continue loop
-;     ret
-
-
 SetHLToFirstInvaderXY:
     ; first set HL to SCRN_VX_B*[Y]
     ld h, 0
@@ -561,6 +551,7 @@ wBulletAlive : DB
 SECTION "Invaders", wram0
 wInvaderSlide : db
 wInvaderDir: db ; 0= right, 1= left
+wInvadersMovedDown: db
 wFirstInvaderX: db
 wFirstInvaderY: db
 
