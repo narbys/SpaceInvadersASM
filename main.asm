@@ -91,8 +91,8 @@ ClearBkg:
     ; ld [hl], $01; Tile 1 (the invader tile)
 
     ld hl, _SCRN0+SCRN_VX_B*_INV_START_Y+_INV_START_X; Load $9800 into hl, + 32*Y+X for startpos in tiles
-    ld b, 40; 40 invaders to draw
-    ld c, 8; Amount of invaders per row
+    ;ld b, 40; 40 invaders to draw
+    ;ld c, 8; Amount of invaders per row
     ld de, aInvaderData; Load invaderdata address into DE
     call DrawInvadersInit
 
@@ -256,8 +256,8 @@ SlideZero:
     ld e, $00; Next tile ID
     jp SlideZeroMove
 MoveInvaders:
-    ld b, 40; 40 invaders
-    ld c, 8; 8 invaders per row
+    ;ld b, 40; 40 invaders
+    ;ld c, 8; 8 invaders per row
     call DrawInvaderTiles
     jp ClearTopInvaderRow
 MoveInvadersLeft:
@@ -270,14 +270,14 @@ MoveInvadersLeft:
     ld a, b;
     ld e, a; load the previous d into e
 
-    ld b, 40
-    ld c, 8
+    ;ld b, 40
+    ;ld c, 8
     call DrawInvaderTiles
     jp ClearTopInvaderRow
 
 SlideZeroMove:
-    ld b, 40
-    ld c, 8
+    ;ld b, 40
+    ;ld c, 8
     call DrawInvadersZeroSlide
 
     ; Check if we hit the left edge
@@ -657,6 +657,9 @@ Input:
 ; b= amount to draw(40), c=rows(8)
 ; de= address of invader data
 DrawInvadersInit:
+    ld b, INVADER_AMOUNT
+    ld c, INVADERS_PER_ROW
+.drawInvaders
     ld a, $01
     ld [hl], a; Draw initial tile onto screen
 
@@ -683,11 +686,14 @@ DrawInvadersInit:
     ld b, a; Put the original value of b back into b
 .NextInvaderRowSkipInit
     dec b; Decrement the amount we need to draw
-    jp nz, DrawInvadersInit; If this amount isn't 0, continue loop
+    jp nz, .drawInvaders; If this amount isn't 0, continue loop
     ret
 
 ; A special function to draw for when slide ==0
 DrawInvadersZeroSlide:
+    ld b, INVADER_AMOUNT
+    ld c, INVADERS_PER_ROW
+.drawInvaders
     ld a, $01
     ld [hld], a; Draw invader (tile ID 1) onto screen
     ld a, $00; add whitespace to previous tile
@@ -695,7 +701,7 @@ DrawInvadersZeroSlide:
     inc hl
     ld [hli], a; add whitespace to next tile
     dec c
-    jp nz, .NextInvaderRowSkipZeroSlide; If we still haven't got 8 in our row, don't go to next row
+    jr nz, .NextInvaderRowSkipZeroSlide; If we still haven't got 8 in our row, don't go to next row
     ; Move to next row
     ld a, l
     add a, SCRN_VX_B - INVADERS_PER_ROW * 2 ; One invader is two tiles.
@@ -706,7 +712,7 @@ DrawInvadersZeroSlide:
     ld c, INVADERS_PER_ROW; Reset C
 .NextInvaderRowSkipZeroSlide
     dec b; Decrement the amount we need to draw
-    jp nz, DrawInvadersZeroSlide; If this amount isn't 0, continue loop
+    jr nz, .drawInvaders; If this amount isn't 0, continue loop
     ret
 
 ; hl: Position of first invader
