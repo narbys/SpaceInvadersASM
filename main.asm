@@ -23,6 +23,10 @@ _SPR2_ATT   EQU    	_OAMRAM+11
 _INV_START_X EQU 2
 _INV_START_Y EQU 2
 
+; Invader drawloop
+DEF INVADER_AMOUNT equ 40
+DEF INVADERS_PER_ROW equ 8
+
 SECTION "Header", ROM0[$100]
     jp EntryPoint
 
@@ -30,13 +34,14 @@ SECTION "Header", ROM0[$100]
 
 EntryPoint:
     ; Don't turn LCD off outside of VBlank
-WaitVBlank:
-    ld a, [rLY]
-    cp 144
-    jp c, WaitVBlank
+; WaitVBlank:
+;     ld a, [rLY]
+;     cp 144
+;     jp c, WaitVBlank
+    call WaitVBlank
 
     ; Turn LCD off
-    ld a, 0
+    xor a;ld a, 0
     ld [rLCDC], a
 
     ; First, put an empty tile at the start of our background tiles
@@ -54,17 +59,20 @@ WaitVBlank:
     ld hl, _SCRN0; Load $9800 into hl
     ld bc, 32*32; Number of tiles in the background map
 ClearBkg:
-    ld a, 0; Load 0 into a
+    xor a; ld a, 0; Load 0 into a
     ld [hli], a
     dec bc
     ld a, b; load b into a
     or a, c; or b and c, through a
     jp nz, ClearBkg
 
-
     ; Init global variables
-    ld a, 0
+    xor a;ld a, 0
+    ld [wCurKeys], a
     ld [wFrameCounter], a
+    ld [wBulletAlive], a
+    ld [wPlayerBulletX], a
+    ld [wPlayerBulletY], a
     ld [wInvaderSlide], a; Slide = 0
     ld [wInvadersMovedDown], a
     ld [wInvaderDir], a; 0=right, 1=left
@@ -73,6 +81,11 @@ ClearBkg:
     ld a, _INV_START_Y
     ld [wFirstInvaderY], a
 
+    ld a , 1
+    ld [wCurrMainTile], a
+    xor a;ld a, 0
+    ld [wCurrSlideTile], a
+
     ; Draw a single invader on the background, as a test
     ; ld hl, _SCRN0; Load $9800 into hl again
     ; ld [hl], $01; Tile 1 (the invader tile)
@@ -80,7 +93,16 @@ ClearBkg:
     ld hl, _SCRN0+SCRN_VX_B*_INV_START_Y+_INV_START_X; Load $9800 into hl, + 32*Y+X for startpos in tiles
     ld b, 40; 40 invaders to draw
     ld c, 8; Amount of invaders per row
+    ld de, aInvaderData; Load invaderdata address into DE
     call DrawInvadersInit
+
+    ;Initialise the isAlive data of the array\
+    ; ld hl, aInvaderData; Load initial address of invaderdata in D
+    ; ld a, $01
+    ; rept 40
+    ; ld [hli], a; they are alive at the start, set all to 1
+    ; endr
+
 
 ; DrawInvadersInit:
 ;     ld a, $01
@@ -111,7 +133,7 @@ ClearBkg:
     call Memcopy
 
     ; Clear the OAM
-    ld a, 0 ; Load 0 into a
+    xor a;ld a, 0 ; Load 0 into a
     ld b, 160 ; Load the amount of memory to clear into b 
     ld hl, _OAMRAM
 ClearOam:
@@ -125,7 +147,7 @@ ClearOam:
     ld [hli], a; load Y into OAM and increment address
     ld a, 80 ; X
     ld [hli], a; load X into OAM and increment address
-    ld a, 0; Tile ID is 0. Attributes are null
+    xor a;ld a, 0; Tile ID is 0. Attributes are null
     ld [hli], a; Set sprite ID to 0
     ld [hli], a; Set attributes to null
     ; Second part of ship
@@ -135,16 +157,16 @@ ClearOam:
     ld [hli], a
     ld a, 1; Tile ID
     ld [hli], a; Set sprite ID to 1
-    ld a, 0; Attributes are null
+    xor a;ld a, 0; Attributes are null
     ld [hli], a;
     ; Bullet
-    ld a, 0; Y
+    xor a;ld a, 0; Y
     ld [hli], a
-    ld a, 0; X
+    xor a;ld a, 0; X
     ld [hli], a
     ld a, 2; Sprite ID is 2
     ld [hli], a
-    ld a, 0; Attributes are null
+    xor a;ld a, 0; Attributes are null
     ld [hl], a
 
     ; Turn LCD On
@@ -168,8 +190,8 @@ WaitVBlank2:
     cp 144
     jp c, WaitVBlank2
 
-    ; Check the current keys every frame
-    call Input
+    ; ; Check the current keys every frame
+    ; call Input
 
     ; Update
 Update:
@@ -179,10 +201,10 @@ UpdateInvaders:
     ld a, [wFrameCounter]
     inc a; Increment wframecounter
     ld [wFrameCounter], a
-    cp a, 30; Every N frames run following code
+    cp a, 10; Every N frames run following code
     jp nz, EndUpdateInvaders
 
-    ld a, 0; Reset wFrameCounter back to 0
+    xor a;ld a, 0; Reset wFrameCounter back to 0
     ld [wFrameCounter], a
 
     ; ld d, $01; Our tile ID
@@ -256,7 +278,7 @@ MoveInvadersLeft:
 SlideZeroMove:
     ld b, 40
     ld c, 8
-    call DrawInvadersInit
+    call DrawInvadersZeroSlide
 
     ; Check if we hit the left edge
     ld a, %0001_1111
@@ -278,7 +300,7 @@ ChangeDirToLeft:
     ld [wInvaderDir], a
     jp MoveRowDown
 ChangeDirToRight:
-    ld a, 0
+    xor a;ld a, 0
     ld [wInvaderDir], a
 MoveRowDown:
     ld a, [wFirstInvaderY]
@@ -294,18 +316,39 @@ ClearTopInvaderRow:
     cp 1; if invadersmoveddown==1
     jp nz, IncreaseSlide
     ; Reset our InvadersMovedDown
-    ld a, 0
+    xor a;ld a, 0
     ld [wInvadersMovedDown], a
     ; Clear the row above us
     call SetHLToFirstInvaderXY
-    ld a, l
-    sub a, 32; Get tile above us
-    and a, %1110_0000; Set last 5 bits (X position) to 0
-    ld l, a
+    ; Subtract 32 from the HL register to get the tile above us
+;     ld a, l
+;     ld b, 32
+;     cp 0; check if L is 0
+;     jp nz, GetTileAboveUs
+;     dec h; h--
+;     ld l, $FF
+;     ld a, l
+;     ld b, 31
+; GetTileAboveUs:
+;     sub a, b; substract 32 (or 31 in case of L==00) from L
+
+;     and a, %1110_0000; Set last 5 bits (X position) to 0
+;     ld l, a
+    ; Go up one row.
+    ld a, l ; Load out L into A
+    sub SCRN_VX_B; L - 32
+    jr nc, :+; See if there is a carry (if L is 00). if not just continue
+    dec h; if so, decrease our H
+    :
+    ; Set the X "component" to 0.
+    and %1110_0000
+    ld l, a; put our position back into L to get the correct address at HL
+
     ; hl should now contain the correct position
     ld b, 20; Tiles to clear
     ld a, $00
 ClearTiles:
+    call WaitForVRamMode
     ld [hli], a
     dec b
     jp nz, ClearTiles
@@ -319,7 +362,7 @@ IncreaseSlide:
     cp a, 8
     jp nz, EndUpdateInvaders ; Skip reset slide and moving the X pos, skip to end of update
     ; Reset Slide
-    ld a, 0
+    xor a;ld a, 0
     ld [wInvaderSlide], a
     ; Increase/Decrease the X pos of our initial invader
     ; Check if we are going right, otherwise decrease
@@ -337,13 +380,16 @@ DecreaseFirstInvaderX:
     dec a ; X--
     ld [wFirstInvaderX], a ; Put the value back in the variable
 
+    ;End of invader update
 EndUpdateInvaders:
+
 UpdatePlayerBullet:
     ; If wBulletAlive 
     ld a, [wBulletAlive] 
-    and a, 1
+    cp 0
     jp z, EndUpdatePlayerBullet
-
+    
+    call WaitVBlank ; ONLY change OAM during VBlank!!
     ; Increase the bullet Y
     ld a, [_SPR2_Y]
     sub a, 3; Y goes down, move by 3 pixels
@@ -351,22 +397,158 @@ UpdatePlayerBullet:
     cp a, 8
     jp c, DeactivatePlayerBullet; if a < 8
     ld [_SPR2_Y], a
+    ; Load our bullet XY into variables so we dont have to access OAM in our loop
+    ld [wPlayerBulletY], a
+    ld a, [_SPR2_X]
+    ld [wPlayerBulletX], a
+
+    ;jp EndUpdatePlayerBullet
+
+    ; Check if we hit an invader
+
+    ;Method 1: if we store invader pos in array
+    ; We can make an array with 3 bytes per invader: X, Y, isAlive. 
+    ; foreach: convert pos to pixel XY instead of tile
+    ; Check if bullet pos is within boundaries
+    ; if so, set invader to unalive and destroy bullet
+
+    ; Convert each invader VRAM tile to sprite XY
+    ld de, aInvaderData; put de to initial invader data
+    ld c, 120; Invader Data array size
+InvaderDataLoop:
+    ; check if not the end of InvaderData
+    ld a, c
+    sub 3; Substract 3 from our size, as every invader exists of 3 elements
+    cp 0; Check if we reached end of array
+    jp z, EndInvaderDataLoop; If so: stop looping
+    ld c, a;
+    ld a, [de]
+    ld h, a
+    inc de
+    ld a, [de]
+    ld l, a
+    ; HL should now contain our tile address
+    inc de
+    ld a, [de]
+    cp 0; Check if we are not alive
+    jp z, InvaderDataLoop; Loop to the next if so
+    inc de; Be sure we are already on the correct starting position of our next data for the next loop
+ConvertBkgPosToPixelPos:
+    ; Convert VRAM address to pixel XY
+ConvertInvaderX:
+    ; Get X
+    ld a, l; load L into A
+    and a, %0001_1111; get the lower 5 bits of L to get the X position
+    ; Convert tile X to pixel X
+    ; InvaderX = x*8+8+slide-2*slidedir(-/+)
+    ; X*8
+    add a, a; *2
+    add a, a; *4
+    add a, a; *8
+    ;+8
+    add a, 8
+    ld b, a; store X into B
+    ;+/-slide
+    ld a, [wInvaderDir]
+    cp 0
+    jp nz, ConvertLeft; if we are not going right, jump to the left conversion
+ConvertRight:
+    ld a, [wInvaderSlide]
+    add b; + slide
+    sub a, 2; -2
+    jp StoreInvaderX; We are done converting, store it and move on
+ConvertLeft:
+    ld a, [wInvaderSlide]
+    ld l, a
+    ld a, b
+    sub l; - slide
+    add a, 2; +2
+StoreInvaderX:
+    ld b, a; Store X into B
+ConvertInvaderY:
+    ; Get Y
+    ;0000_0011_1110_0000
+    ld a, l
+    and %1110_0000; get lower bits of Y
+    ld l, a; store back into L
+    ld a, h
+    and a, %0000_0011; get upper bits of Y
+    ld h, a; store back into h
+    ; Now our isolated Y from the VRAM address looks like 000000YYYYY00000 
+    ; so we need to shift them to the right by 5 to get the actual value
+    rept 5
+    sra l
+    endr
+    ; HL should now look like this: 0000_0000_000y_yyyy
+    ; Check if bullet XY is inside of the boundaries
+    ; Convert tile Y to pixel Y
+    ; InvaderY=Y*8+16
+    ld a, l
+    add a,a;*2
+    add a,a;*4
+    add a,a;*8
+    add a, 16; +16
+    ld l, a; store Y into L
+
+    ;B now holds the pixel X and L the pixel Y of the invader
+    ;Now we need to check if our bullet XY is within the boundaries of the invader
+    ; First, check X
+
+    ; if bulletX >= invader X
+    ; && bulletX <= invader X + 8
+    ld a, [wPlayerBulletX]; put our bullet X into A
+    cp a, b; compare B(invader X) with A
+    jp c, InvaderDataLoop; if not >=, it is false so go to next
+    ld a, b; put invader X in A
+    add a, 8; invader X + 8
+    ld b, a; put X back into B
+    ld a, [wPlayerBulletX]; put our bullet X into A
+    cp a, b; compare X+8 with A
+    jp nc, InvaderDataLoop; if not <, it is false and go to next
+    ; Our B now no longer holds X, but X+8. But we won't use it anymore so who cares
+
+    ;check Y
+    ; if bulletY >= invader Y
+    ; if bulletY <= invader Y+8
+    ld a, [wPlayerBulletY]; put bullet Y into A
+    cp a, l; compare it with our invader Y
+    jp c, InvaderDataLoop; if not >=, go to next
+    ld a, l; put invader Y in A
+    add a, 8; invader Y + 8
+    ld l, a; put Y back into L
+    ld a, [wPlayerBulletY]; put our bullet Y into A
+    cp a, l; compare Y + 8 with A
+    jp nc, InvaderDataLoop; if not <, it is false and go to next
+
+    ; If we get here, it hits
+    dec de; go back to the last value (which is isalive) of our previous element
+    xor a;ld a, 0
+    ld [de], a; put isalive to 0
+    inc de; Go back to our next element
+    jp DeactivatePlayerBullet; our bullet will be deavtivated when hitting an invader
+
+EndInvaderDataLoop:
     jp EndUpdatePlayerBullet
 DeactivatePlayerBullet:
-    ld a, 0
+    xor a;ld a, 0
     ld [wBulletAlive], a; Set bullet to no longer alive
     ld [_SPR2_Y], a; Set bullet Y to 0
     ld [_SPR2_X], a; Set bullet X to 0
+
 EndUpdatePlayerBullet:
+
     ; End of update
 EndUpdate:
-
+   
+    ; Check the current keys every frame
+    call Input
     ; Check if A is pressed
 CheckAButton:
     ld a, [wCurKeys]
     and a, PADF_A
     jp z, CheckLeft; If A is not pressed, go to the next check
 AButton:
+    call WaitVBlank; ONLY change OAM during VBlank!!
     ; Check if there is already a bullet
     ld a, [wBulletAlive]
     and a, 1
@@ -386,6 +568,7 @@ CheckLeft:
     and a, PADF_LEFT
     jp z, CheckRight ; If left isn't pressed, check for right (this is like an else_if)
 Left:
+    call WaitVBlank; ONLY change OAM during VBlank!!
     ; Move player to the left
     ld a, [_SPR0_X]
     dec a
@@ -397,14 +580,14 @@ Left:
     ld a, [_SPR1_X]
     dec a
     ld [_SPR1_X], a
-    jp Main
-
+    jp Main 
 ; Check the right button
 CheckRight:
     ld a, [wCurKeys]
     and a, PADF_RIGHT
     jp z, Main
 Right:
+    call WaitVBlank; ONLY change OAM during VBlank!!
     ; Move player to the right
     ld a, [_SPR1_X] ; Right side first, to later check the right edge
     inc a
@@ -470,14 +653,27 @@ Input:
 .knownret
     ret
 
-
+; Initialise invaders, only to be called at the start of the game
+; b= amount to draw(40), c=rows(8)
+; de= address of invader data
 DrawInvadersInit:
     ld a, $01
-    ld [hld], a; Draw invader (tile ID 1) onto screen
-    ld a, $00; add whitespace to previous tile
-    ld [hli], a
-    inc hl
-    ld [hli], a; add whitespace to next tile
+    ld [hl], a; Draw initial tile onto screen
+
+    ; Load our data into the Array
+    ld a, h
+    ld [de], a; Upper part of address our tile is on
+    inc de
+    ld a, l
+    ld [de], a; Lower part of address our tile is on
+    inc de
+    ld a, 1
+    ld [de], a; They are all alive initially
+    inc de
+
+    inc hl; Increase our VRAM position
+    ld a, $00;
+    ld [hli], a; add whitespace
     dec c
     jp nz, .NextInvaderRowSkipInit; If we still haven't got 8 in our row, don't go to next row
     ld a, b; Store b for now
@@ -485,9 +681,32 @@ DrawInvadersInit:
     add hl, bc; Go to next row
     ld c, 8; Reset C
     ld b, a; Put the original value of b back into b
-.NextInvaderRowSkipInit    
+.NextInvaderRowSkipInit
     dec b; Decrement the amount we need to draw
     jp nz, DrawInvadersInit; If this amount isn't 0, continue loop
+    ret
+
+; A special function to draw for when slide ==0
+DrawInvadersZeroSlide:
+    ld a, $01
+    ld [hld], a; Draw invader (tile ID 1) onto screen
+    ld a, $00; add whitespace to previous tile
+    ld [hli], a
+    inc hl
+    ld [hli], a; add whitespace to next tile
+    dec c
+    jp nz, .NextInvaderRowSkipZeroSlide; If we still haven't got 8 in our row, don't go to next row
+    ; Move to next row
+    ld a, l
+    add a, SCRN_VX_B - INVADERS_PER_ROW * 2 ; One invader is two tiles.
+    ld l, a
+    adc a, h
+    sub l
+    ld h, a
+    ld c, INVADERS_PER_ROW; Reset C
+.NextInvaderRowSkipZeroSlide
+    dec b; Decrement the amount we need to draw
+    jp nz, DrawInvadersZeroSlide; If this amount isn't 0, continue loop
     ret
 
 ; hl: Position of first invader
@@ -496,30 +715,38 @@ DrawInvadersInit:
 ; d: Tile you come from, the one your current X is on
 ; e: Tile going into the next position, the one being slided
 DrawInvaderTiles:
+    ld b, INVADER_AMOUNT
+    ld c, INVADERS_PER_ROW
+.drawInvaders
     ld a, d
     ld [hli], a; Draw invader's current tile onto screen
     ld a, e; add the slide tile
     ld [hli], a
     dec c
-    jp nz, .NextInvaderRowSkip; If we still haven't got 8 in our row, don't go to next row
-    ld a, b; Store b for now
-    ld bc, 16; load the amount of tiles we need to add to go to next row into bc
-    add hl, bc; Go to next row
-    ld c, 8; Reset C
-    ld b, a; Put the original value of b back into b
+    jr nz, .NextInvaderRowSkip; If we still haven't got 8 in our row, don't go to next row
+    ; Move to next row
+    ld a, l
+    add a, SCRN_VX_B - INVADERS_PER_ROW * 2 ; One invader is two tiles.
+    ld l, a
+    adc a, h
+    sub l
+    ld h, a
+    ld c, INVADERS_PER_ROW; Reset C
 .NextInvaderRowSkip 
     dec b; Decrement the amount we need to draw
-    jp nz, DrawInvaderTiles; If this amount isn't 0, continue loop
+    jp nz, .drawInvaders; If this amount isn't 0, continue loop
     ret
+
+
 
 SetHLToFirstInvaderXY:
     ; first set HL to SCRN_VX_B*[Y]
     ld h, 0
     ld a, [wFirstInvaderY]
     ld l, a
-    ld a, [wFirstInvaderY]
-    ld h, 0
-    ld l, a
+    ; ld a, [wFirstInvaderY]
+    ; ld h, 0
+    ; ld l, a
     rept 5; a*32
     add hl, hl
     endr
@@ -533,6 +760,18 @@ SetHLToFirstInvaderXY:
     add hl, bc
     ret
 
+WaitVBlank:
+    ld a, [rLY]
+    cp 144
+    jp c, WaitVBlank
+    ret
+
+    ; Wait until we are in LCD mode 0 or 1, so we can write to VRAM without it being locked
+WaitForVRamMode:
+    ldh a, [rSTAT]
+    and STATF_BUSY; STATF_BUSY is equal to %10
+    jr nz, WaitForVRamMode
+    ret
 
 ;;;;;;;;;;;
 ; Globals ;
@@ -547,6 +786,8 @@ wNewKeys : DB
 
 SECTION "PlayerBullet", wram0
 wBulletAlive : DB
+wPlayerBulletX: DB
+wPlayerBulletY: DB
 
 SECTION "Invaders", wram0
 wInvaderSlide : db
@@ -554,4 +795,54 @@ wInvaderDir: db ; 0= right, 1= left
 wInvadersMovedDown: db
 wFirstInvaderX: db
 wFirstInvaderY: db
+wCurrMainTile: db
+wCurrSlideTile: db
 
+SECTION "InvaderData", wram0
+aInvaderData: ds 120; Array for invader Data.
+    
+
+
+; backups of draw functions
+    
+;     ; A special function to draw for when slide ==0
+; DrawInvadersZeroSlide:
+;     ld a, $01
+;     ld [hld], a; Draw invader (tile ID 1) onto screen
+;     ld a, $00; add whitespace to previous tile
+;     ld [hli], a
+;     inc hl
+;     ld [hli], a; add whitespace to next tile
+;     dec c
+;     jp nz, .NextInvaderRowSkipZeroSlide; If we still haven't got 8 in our row, don't go to next row
+;     ld a, b; Store b for now
+;     ld bc, 16; load the amount of tiles we need to add to go to next row into bc
+;     add hl, bc; Go to next row
+;     ld c, 8; Reset C
+;     ld b, a; Put the original value of b back into b
+; .NextInvaderRowSkipZeroSlide
+;     dec b; Decrement the amount we need to draw
+;     jp nz, DrawInvadersZeroSlide; If this amount isn't 0, continue loop
+;     ret
+
+; ; hl: Position of first invader
+; ; b: Amount(40) of invaders
+; ; c: Amount(8) of invaders per row
+; ; d: Tile you come from, the one your current X is on
+; ; e: Tile going into the next position, the one being slided
+; DrawInvaderTiles:
+;     ld a, d
+;     ld [hli], a; Draw invader's current tile onto screen
+;     ld a, e; add the slide tile
+;     ld [hli], a
+;     dec c
+;     jp nz, .NextInvaderRowSkip; If we still haven't got 8 in our row, don't go to next row
+;     ld a, b; Store b for now
+;     ld bc, 16; load the amount of tiles we need to add to go to next row into bc
+;     add hl, bc; Go to next row
+;     ld c, 8; Reset C
+;     ld b, a; Put the original value of b back into b
+; .NextInvaderRowSkip 
+;     dec b; Decrement the amount we need to draw
+;     jp nz, DrawInvaderTiles; If this amount isn't 0, continue loop
+;     ret
