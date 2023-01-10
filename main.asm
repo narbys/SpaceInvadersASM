@@ -781,11 +781,11 @@ DrawInvaderTiles2:
     ld de, aInvaderData
     ld b, INVADER_AMOUNT; the amount of invaders = data in the array / 3 (because 3 bytes per invader being X,Y,IsAlive)
     jp .drawInvaders
-.skipInvader
-    inc de; go to next invader tile
-    dec b; decrease for our dead invader
-    jr nz, .drawInvaders; if not 0, keep drawing
-    ret; otherwise, return
+; .skipInvader
+;     inc de; go to next invader tile
+;     dec b; decrease for our dead invader
+;     jr nz, .drawInvaders; if not 0, keep drawing
+;     ret; otherwise, return
 .drawInvaders
     ld a, [de]
     ld h, a
@@ -802,14 +802,24 @@ DrawInvaderTiles2:
     ; Check if we should draw
     inc de; go to next value, this is our IsAlive
     ld a, [de]
-    cp 1
-    jr nz, .skipInvader; If not 1, go to next one and don't draw current
     inc de; this will now be on the address of the H value for the next invader already
+    cp 1
+    jr nz, .drawBlank; If not 1, go to next one and don't draw current
+    jr .draw
+    ; instead of skipping, draw a blank
+.drawBlank
+    call WaitForVRamMode
+    xor a; a=0
+    ld [hli], a
+    ld [hl], a
+    jr .skipDraw
+.draw
     call WaitForVRamMode
     ld a, [wCurrMainTile]
     ld [hli], a; Draw invader's current tile onto the address our array is on 
     ld a, [wCurrSlideTile]; add the slide tile
     ld [hl], a
+.skipDraw
     dec b; Decrease invader count
     jr nz, .drawInvaders; if not 0, keep drawing
     ; xor a
